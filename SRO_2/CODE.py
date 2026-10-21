@@ -1,39 +1,78 @@
-class Node:
-    def __init__(self, key):
-        self.left = None
-        self.right = None
-        self.val = key
+import json
+import os
+from typing import List, Dict, Optional
 
-def insert(root, key):
-    # Если дерево пустое, возвращаем новый узел
-    if root is None:
-        return Node(key)
-    else:
-        # Иначе рекурсивно спускаемся по дереву
-        if root.val < key:
-            root.right = insert(root.right, key)
+class EventManager:
+    """Менеджер каталога мероприятий университета."""
+    def __init__(self, data_file: str = "events.json"):
+        self.data_file = data_file
+        self.events: List[Dict] = []
+        self.load_data()
+
+    def load_data(self) -> None:
+        """Загрузка данных из JSON-файла (Лекция 7, 8)."""
+        if os.path.exists(self.data_file):
+            try:
+                with open(self.data_file, 'r', encoding='utf-8') as f:
+                    self.events = json.load(f)
+            except Exception:
+                self.events = []
         else:
-            root.left = insert(root.left, key)
-    return root
+            self.events = []
 
-def print_tree(root, level=0, prefix="Корень: "):
-    # Функция для наглядного текстового вывода иерархии
-    if root is not None:
-        print(" " * (level * 4) + prefix + str(root.val))
-        if root.left is not None or root.right is not None:
-            # L - левая ветвь, R - правая ветвь
-            print_tree(root.left, level + 1, "L--- ")
-            print_tree(root.right, level + 1, "R--- ")
+    def save_data(self) -> None:
+        """Сохранение данных в JSON-файл."""
+        with open(self.data_file, 'w', encoding='utf-8') as f:
+            json.dump(self.events, f, ensure_ascii=False, indent=4)
 
-# Создание дерева и добавление узлов
-root = Node(50)
-root = insert(root, 30)
-root = insert(root, 20)
-root = insert(root, 40)
-root = insert(root, 70)
-root = insert(root, 60)
-root = insert(root, 80)
+    def add_event(self, event_id: int, title: str, category: str, date: str, max_seats: int) -> bool:
+        """Добавление нового мероприятия с валидацией ввода (Лекция 5)."""
+        if any(e['id'] == event_id for e in self.events):
+            return False  # Ошибка: ID должен быть уникальным
+        if max_seats <= 0 or not title.strip() or not category.strip():
+            return False  # Ошибка ввода: неверные параметры
 
-# Вывод структуры
-print("Иерархия бинарного дерева:")
-print_tree(root)
+        new_event = {
+            "id": event_id,
+            "title": title.strip(),
+            "category": category.strip(),
+            "date": date.strip(),
+            "max_seats": max_seats,
+            "registered_users": []
+        }
+        self.events.append(new_event)
+        self.save_data()
+        return True
+
+    def filter_events(self, category: Optional[str] = None, search_query: Optional[str] = None) -> List[Dict]:
+        """Фильтрация и поиск мероприятий по категориям и строкам (Лекция 4, 6, 7)."""
+        results = self.events
+        if category:
+            results = [e for e in results if e['category'].lower() == category.lower()]
+        if search_query:
+            results = [e for e in results if search_query.lower() in e['title'].lower()]
+        return results
+
+    def register_participant(self, event_id: int, student_id: str) -> str:
+        """Регистрация участника на мероприятие с проверкой лимитов."""
+        for event in self.events:
+            if event['id'] == event_id:
+                if student_id in event['registered_users']:
+                    return "ALREADY_REGISTERED"
+                if len(event['registered_users']) >= event['max_seats']:
+                    return "NO_SEATS"
+                event['registered_users'].append(student_id)
+                self.save_data()
+                return "SUCCESS"
+        return "EVENT_NOT_FOUND"
+
+    def cancel_registration(self, event_id: int, student_id: str) -> bool:
+        """Отмена регистрации участника."""
+        for event in self.events:
+            if event['id'] == event_id:
+                if student_id in event['registered_users']:
+                    event['registered_users'].remove(student_id)
+                    self.save_data()
+                    return True
+                return False
+        return False
